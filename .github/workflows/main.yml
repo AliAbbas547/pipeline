@@ -38,8 +38,7 @@ jobs:
                 aws s3 cp "$file" "s3://yes1/$FILE_PATH/$FILE_NAME"
               fi
             else
-              aws s3 sync --update "./$FILE_PATH" "s3://yes1/$FILE_PATH"
-              echo "Updated $FILE_PATH: File already exists in S3 and has been modified"
+              echo "Skipping $file: File already exists in S3"
             fi
           done
 
@@ -48,7 +47,6 @@ jobs:
             if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
               aws s3 sync "./$folder" "s3://yes1/$folder"
             else
-              aws s3 sync --update "./$folder" "s3://yes1/$folder"
-              echo "Updated $folder: Folder already exists in S3 and has been modified"
+              echo "Skipping $folder: Folder already exists in S3"
             fi
           done
