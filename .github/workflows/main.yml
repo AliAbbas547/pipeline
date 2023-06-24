@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  delete:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -27,22 +30,41 @@ jobs:
           S3_FILES=$(aws s3 ls s3://yes1 --recursive | awk '{ print $NF }')
           S3_FOLDERS=$(aws s3 ls s3://yes1 --recursive | awk -F"/" '{ print $1 }' | uniq)
 
-          # Sync files
+          # Sync files and delete missing files
           for file in $GITHUB_FILES; do
             FILE_PATH=$(dirname "$file")
             FILE_NAME=$(basename "$file")
             if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
-              aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+              aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
             else
-              echo "Skipping $file: File already exists in S3"
+              # Check if file content has changed
+              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" - > /dev/null); then
+                aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
+              else
+                echo "Skipping $file: File content has not changed"
+              fi
             fi
           done
 
-          # Sync folders
+          # Delete missing files
+          for s3_file in $S3_FILES; do
+            if ! echo "$GITHUB_FILES" | grep -q -w "$s3_file"; then
+              aws s3 rm "s3://yes1/$s3_file" > /dev/null
+              echo "Deleted $s3_file: File does not exist in GitHub"
+            fi
+          done
+
+          # Sync folders and delete missing folders
           for folder in $GITHUB_FOLDERS; do
             if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
-              aws s3 sync "./$folder" "s3://yes1/$folder"
-            else
-              echo "Skipping $folder: Folder already exists in S3"
+              aws s3 sync "./$folder" "s3://yes1/$folder" > /dev/null
+            fi
+          done
+
+          # Delete missing folders
+          for s3_folder in $S3_FOLDERS; do
+            if ! echo "$GITHUB_FOLDERS" | grep -q -w "$s3_folder"; then
+              aws s3 rm "s3://yes1/$s3_folder" --recursive > /dev/null
+              echo "Deleted $s3_folder: Folder does not exist in GitHub"
             fi
           done
