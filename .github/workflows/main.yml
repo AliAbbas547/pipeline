@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  delete:
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -27,7 +30,7 @@ jobs:
           S3_FILES=$(aws s3 ls s3://yes1 --recursive | awk '{ print $NF }')
           S3_FOLDERS=$(aws s3 ls s3://yes1 --recursive | awk -F"/" '{ print $1 }' | uniq)
 
-          # Sync files
+          # Sync files and delete missing files
           for file in $GITHUB_FILES; do
             FILE_PATH=$(dirname "$file")
             FILE_NAME=$(basename "$file")
@@ -36,13 +39,21 @@ jobs:
             else
               echo "Skipping $file: File already exists in S3"
             fi
+            # Delete file if missing in GitHub
+            if ! echo "$GITHUB_FILES" | grep -q -w "$FILE_NAME"; then
+              aws s3 rm "s3://yes1/$FILE_NAME"
+            fi
           done
 
-          # Sync folders
+          # Sync folders and delete missing folders
           for folder in $GITHUB_FOLDERS; do
             if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
               aws s3 sync "./$folder" "s3://yes1/$folder"
             else
               echo "Skipping $folder: Folder already exists in S3"
+            fi
+            # Delete folder if missing in GitHub
+            if ! echo "$GITHUB_FOLDERS" | grep -q -w "$folder"; then
+              aws s3 rm "s3://yes1/$folder" --recursive
             fi
           done
