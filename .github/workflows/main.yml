@@ -37,7 +37,12 @@ jobs:
             if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
               aws s3 cp "$file" "s3://yes1/$FILE_NAME"
             else
-              echo "Skipping $file: File already exists in S3"
+              # Check if file content has changed
+              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" -); then
+                aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+              else
+                echo "Skipping $file: File content has not changed"
+              fi
             fi
             # Delete file if missing in GitHub
             if ! echo "$GITHUB_FILES" | grep -q -w "$FILE_NAME"; then
@@ -50,7 +55,13 @@ jobs:
             if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
               aws s3 sync "./$folder" "s3://yes1/$folder"
             else
-              echo "Skipping $folder: Folder already exists in S3"
+              # Check if folder content has changed
+              diff=$(diff -r "./$folder" <(aws s3 ls "s3://yes1/$folder" --recursive))
+              if [ "$diff" != "" ]; then
+                aws s3 sync "./$folder" "s3://yes1/$folder"
+              else
+                echo "Skipping $folder: Folder content has not changed"
+              fi
             fi
             # Delete folder if missing in GitHub
             if ! echo "$GITHUB_FOLDERS" | grep -q -w "$folder"; then
