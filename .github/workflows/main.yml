@@ -1,1 +1,71 @@
-hi
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  delete:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Sync files and folders to S3 bucket
+        run: |
+          GITHUB_FILES=$(find . -type f -not -path '*/\.*')
+          GITHUB_FOLDERS=$(find . -type d -not -path '*/\.*')
+          S3_FILES=$(aws s3 ls s3://yes1 --recursive | awk '{ print $NF }')
+          S3_FOLDERS=$(aws s3 ls s3://yes1 --recursive | awk -F"/" '{ print $1 }' | uniq)
+
+          # Sync files and delete missing files
+          for file in $GITHUB_FILES; do
+            FILE_PATH=$(dirname "$file")
+            FILE_NAME=$(basename "$file")
+            if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
+              aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+            else
+              # Check if file content has changed
+              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" -); then
+                aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+              else
+                echo "Skipping $file: File content has not changed"
+              fi
+            fi
+            # Delete file if missing in GitHub
+            if ! echo "$GITHUB_FILES" | grep -q -w "$FILE_NAME"; then
+              aws s3 rm "s3://yes1/$FILE_NAME"
+            fi
+          done
+
+          # Sync folders and delete missing folders
+          for folder in $GITHUB_FOLDERS; do
+            if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
+              aws s3 sync "./$folder" "s3://yes1/$folder"
+            else
+              # Check if folder content has changed
+              diff=$(diff -r "./$folder" <(aws s3 ls "s3://yes1/$folder" --recursive))
+              if [ "$diff" != "" ]; then
+                aws s3 sync "./$folder" "s3://yes1/$folder"
+              else
+                echo "Skipping $folder: Folder content has not changed"
+              fi
+            fi
+            # Delete folder if missing in GitHub
+            if ! echo "$GITHUB_FOLDERS" | grep -q -w "$folder"; then
+              aws s3 rm "s3://yes1/$folder" --recursive
+            fi
+          done
+
