@@ -35,37 +35,36 @@ jobs:
             FILE_PATH=$(dirname "$file")
             FILE_NAME=$(basename "$file")
             if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
-              aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+              aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
             else
               # Check if file content has changed
-              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" -); then
-                aws s3 cp "$file" "s3://yes1/$FILE_NAME"
+              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" - > /dev/null); then
+                aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
               else
                 echo "Skipping $file: File content has not changed"
               fi
             fi
             # Delete file if missing in GitHub
             if ! echo "$GITHUB_FILES" | grep -q -w "$FILE_NAME"; then
-              aws s3 rm "s3://yes1/$FILE_NAME"
+              aws s3 rm "s3://yes1/$FILE_NAME" > /dev/null
             fi
           done
 
           # Sync folders and delete missing folders
           for folder in $GITHUB_FOLDERS; do
             if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
-              aws s3 sync "./$folder" "s3://yes1/$folder"
+              aws s3 sync "./$folder" "s3://yes1/$folder" > /dev/null
             else
               # Check if folder content has changed
-              diff=$(diff -r "./$folder" <(aws s3 ls "s3://yes1/$folder" --recursive))
-              if [ "$diff" != "" ]; then
-                aws s3 sync "./$folder" "s3://yes1/$folder"
+              diff=$(diff -r "./$folder" <(aws s3 ls "s3://yes1/$folder" --recursive) | wc -l)
+              if [ "$diff" -ne 0 ]; then
+                aws s3 sync "./$folder" "s3://yes1/$folder" > /dev/null
               else
                 echo "Skipping $folder: Folder content has not changed"
               fi
             fi
             # Delete folder if missing in GitHub
             if ! echo "$GITHUB_FOLDERS" | grep -q -w "$folder"; then
-              aws s3 rm "s3://yes1/$folder" --recursive
+              aws s3 rm "s3://yes1/$folder" --recursive > /dev/null
             fi
           done
-
