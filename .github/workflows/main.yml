@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  delete:
-    branches:
-      - main
 
 jobs:
   deploy:
@@ -34,12 +31,8 @@ jobs:
           for file in $GITHUB_FILES; do
             FILE_PATH=$(dirname "$file")
             FILE_NAME=$(basename "$file")
-            if ! echo "$S3_FILES" | grep -q -w "$FILE_PATH/$FILE_NAME"; then
-              if [ "$FILE_PATH" = "." ]; then
-                aws s3 cp "$file" "s3://yes1/$FILE_NAME"
-              else
-                aws s3 cp "$file" "s3://yes1/$FILE_PATH/$FILE_NAME"
-              fi
+            if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
+              aws s3 cp "$file" "s3://yes1/$FILE_NAME"
             else
               echo "Skipping $file: File already exists in S3"
             fi
