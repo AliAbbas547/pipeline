@@ -30,41 +30,37 @@ jobs:
           S3_FILES=$(aws s3 ls s3://yes1 --recursive | awk '{ print $NF }')
           S3_FOLDERS=$(aws s3 ls s3://yes1 --recursive | awk -F"/" '{ print $1 }' | uniq)
 
-          # Sync files and delete missing files
+          # Sync files and folders
           for file in $GITHUB_FILES; do
             FILE_PATH=$(dirname "$file")
             FILE_NAME=$(basename "$file")
-            if ! echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
-              aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
-            else
+            if echo "$S3_FILES" | grep -q -w "$FILE_NAME"; then
               # Check if file content has changed
-              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" - > /dev/null); then
-                aws s3 cp "$file" "s3://yes1/$FILE_NAME" > /dev/null
+              if ! cmp -s "$file" <(aws s3 cp "s3://yes1/$FILE_NAME" -); then
+                aws s3 cp "$file" "s3://yes1/$FILE_NAME"
               else
                 echo "Skipping $file: File content has not changed"
               fi
             fi
-            # Delete file if missing in GitHub
-            if ! echo "$GITHUB_FILES" | grep -q -w "$FILE_NAME"; then
-              aws s3 rm "s3://yes1/$FILE_NAME" > /dev/null
+          done
+
+          for folder in $GITHUB_FOLDERS; do
+            if echo "$S3_FOLDERS" | grep -q -w "$folder"; then
+              aws s3 sync "./$folder" "s3://yes1/$folder" --delete
             fi
           done
 
-          # Sync folders and delete missing folders
-          for folder in $GITHUB_FOLDERS; do
-            if ! echo "$S3_FOLDERS" | grep -q -w "$folder"; then
-              aws s3 sync "./$folder" "s3://yes1/$folder" > /dev/null
-            else
-              # Check if folder content has changed
-              diff=$(diff -r "./$folder" <(aws s3 ls "s3://yes1/$folder" --recursive) | wc -l)
-              if [ "$diff" -ne 0 ]; then
-                aws s3 sync "./$folder" "s3://yes1/$folder" > /dev/null
-              else
-                echo "Skipping $folder: Folder content has not changed"
-              fi
+          # Delete missing files and folders
+          for s3_file in $S3_FILES; do
+            if ! echo "$GITHUB_FILES" | grep -q -w "$s3_file"; then
+              aws s3 rm "s3://yes1/$s3_file"
+              echo "Deleted $s3_file: File does not exist in GitHub"
             fi
-            # Delete folder if missing in GitHub
-            if ! echo "$GITHUB_FOLDERS" | grep -q -w "$folder"; then
-              aws s3 rm "s3://yes1/$folder" --recursive > /dev/null
+          done
+
+          for s3_folder in $S3_FOLDERS; do
+            if ! echo "$GITHUB_FOLDERS" | grep -q -w "$s3_folder"; then
+              aws s3 rm "s3://yes1/$s3_folder" --recursive
+              echo "Deleted $s3_folder: Folder does not exist in GitHub"
             fi
           done
